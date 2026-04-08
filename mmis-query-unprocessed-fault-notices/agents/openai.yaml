@@ -1,0 +1,4 @@
+interface:
+  display_name: "MMIS Query Unprocessed Fault Notices"
+  short_description: "Query MMIS for the unprocessed fault notices of the assigned depot and capture a screenshot."
+  default_prompt: "Query MMIS for 本段未處理通報(車輛配屬段) and save a screenshot."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "MMIS Excel Formatting"
+  short_description: "Format and sort the daily MMIS Excel export file."
+  default_prompt: "Format and sort today's MMIS Excel export file."

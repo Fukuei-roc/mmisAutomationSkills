@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skills Git Publisher"
+  short_description: "Commit and push .codex/skills milestones to GitHub."
+  default_prompt: "Commit the current skills milestone and push it to GitHub."

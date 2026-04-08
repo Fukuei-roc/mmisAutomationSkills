@@ -1,0 +1,4 @@
+interface:
+  display_name: "MMIS Dev Knowledge"
+  short_description: "Read and update reusable MMIS automation engineering knowledge."
+  default_prompt: "Read the MMIS development knowledge before implementation, or update it after new MMIS engineering lessons are learned."

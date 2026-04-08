@@ -1,0 +1,4 @@
+interface:
+  display_name: "MMIS Query Open B-Level Fault Notices"
+  short_description: "Query MMIS for open B-level fault notices and download the report."
+  default_prompt: "Query MMIS for 本段未結案 B 級故障通報 and download the report."

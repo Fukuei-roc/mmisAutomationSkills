@@ -1,0 +1,431 @@
+{
+  "meta": {
+    "name": "mmis-dev-knowledge",
+    "version": 1,
+    "last_updated": "2026-04-08",
+    "purpose": "Store reusable MMIS automation engineering knowledge for future skill development."
+  },
+  "loginStrategies": [
+    {
+      "id": "request-driven-mxlogin-session-bootstrap",
+      "title": "Use mxlogin.jsp and requests.Session for fast MMIS login",
+      "description": "MMIS login can be completed without Playwright by requesting login.jsp, parsing loginform, posting credentials to mxlogin.jsp, following the redirect, and extracting uisessionid plus page state from the start center HTML.",
+      "applicable_when": [
+        "Building MMIS automation that only needs authenticated session bootstrap",
+        "Reducing login latency before query or download automation",
+        "Reusing one login across multiple MMIS operations"
+      ],
+      "advantages": [
+        "Easy to cache and reuse cookies/session state",
+        "Much faster than step-by-step browser automation",
+        "Works well as the baseline entrypoint for MMIS automations"
+      ],
+      "disadvantages": [
+        "Does not automatically solve downstream Maximo event replay",
+        "Still requires parsing MMIS HTML for page state variables"
+      ],
+      "recommended_when": [
+        "Starting any MMIS automation refactor",
+        "You need stable login before attempting deeper protocol work"
+      ],
+      "status": "confirmed",
+      "reusable": true,
+      "notes": [
+        "Cache cookies and state for later reuse.",
+        "Parse PAGESEQNUM, UISESSIONID, CSRFTOKEN, and APPID from the loaded page."
+      ]
+    },
+    {
+      "id": "browser-login-as-contingency",
+      "title": "Keep browser login only as contingency or UI-validation path",
+      "description": "Browser-driven login remains useful for screenshot requests, visible UI verification, and fallback when request-driven login or downstream flows are blocked.",
+      "applicable_when": [
+        "HTTP/session flow cannot complete the job",
+        "Need to confirm live UI behavior",
+        "The user explicitly needs screenshots"
+      ],
+      "advantages": [
+        "Closer to real user interaction",
+        "Good for visual debugging"
+      ],
+      "disadvantages": [
+        "More fragile due to UI timing and rendering",
+        "Slower"
+      ],
+      "recommended_when": [
+        "Only when request-driven flow cannot complete the task"
+      ],
+      "status": "confirmed",
+      "reusable": true,
+      "notes": [
+        "Do not default to Playwright for routine MMIS automation."
+      ]
+    }
+  ],
+  "apiPatterns": [
+    {
+      "id": "maximo-ui-event-post-pattern",
+      "title": "Maximo UI actions are driven by maximo.jsp event posts",
+      "description": "MMIS uses POST /maximo/ui/maximo.jsp with form-encoded event payloads to change app, open query menus, and select saved queries.",
+      "applicable_when": [
+        "Replacing UI clicks with request replay",
+        "Reverse engineering MMIS actions"
+      ],
+      "advantages": [
+        "Allows request-driven reconstruction of UI actions",
+        "Provides a path to remove most browser waits"
+      ],
+      "disadvantages": [
+        "Not a simple REST API",
+        "Requires exact session, csrf, page sequence, and referer context"
+      ],
+      "recommended_when": [
+        "Analyzing a UI action before deciding whether Playwright is necessary"
+      ],
+      "status": "confirmed",
+      "reusable": true,
+      "notes": [
+        "Observed events include changeapp and click.",
+        "Payload fields include uisessionid, csrftoken, currentfocus, requesttype, responsetype, pageseqnum, xhrseqnum, and events JSON."
+      ]
+    },
+    {
+      "id": "download-link-from-rendered-html",
+      "title": "Download URL can be extracted from rendered HTML href",
+      "description": "After the target MMIS list view is loaded, the download link usually contains openEncodedURL with an actual download URL using _tbldnld.",
+      "applicable_when": [
+        "Downloading list results after a query is already applied"
+      ],
+      "advantages": [
+        "Bypasses manual click logic once the page is in the right state",
+        "Can often be fetched directly with requests"
+      ],
+      "disadvantages": [
+        "Still depends on the page already reflecting the desired query state"
+      ],
+      "recommended_when": [
+        "The page HTML already contains the final download href"
+      ],
+      "status": "confirmed",
+      "reusable": true,
+      "notes": [
+        "Look for openEncodedURL(\"https://..._tbldnld=results_showlist...\")."
+      ]
+    },
+    {
+      "id": "changeapp-requires-refreshed-start-center-state",
+      "title": "Refresh start center once before replaying changeapp",
+      "description": "A fresh request-driven login leaves start center at an earlier PAGESEQNUM than the browser uses for FavoriteApp changeapp. Refresh start center once, then post the changeapp event with the current PAGESEQNUM and CSRFTOKEN.",
+      "applicable_when": [
+        "Switching from start center to another MMIS app using maximo.jsp events"
+      ],
+      "advantages": [
+        "Avoids sharedSession rejection during request-driven app switch",
+        "Matches observed browser event sequencing"
+      ],
+      "disadvantages": [
+        "Adds one extra GET before the first changeapp event"
+      ],
+      "recommended_when": [
+        "Replacing FavoriteApp clicks with HTTP event replay"
+      ],
+      "status": "confirmed",
+      "reusable": true,
+      "notes": [
+        "Do not increment pageseqnum beyond the refreshed page state; send the current page sequence.",
+        "Follow the changeapp redirect URL and parse the new app state from the loaded page."
+      ]
+    },
+    {
+      "id": "download-url-must-keep-uisessionid",
+      "title": "Keep the full download URL including uisessionid",
+      "description": "The MMIS download href includes _tbldnld plus an appended uisessionid parameter. Truncating the URL at _tbldnld causes the server to return HTTP 500.",
+      "applicable_when": [
+        "Extracting table download links from MMIS HTML"
+      ],
+      "advantages": [
+        "Allows direct request-driven file download",
+        "Eliminates a hidden cause of generic server errors"
+      ],
+      "disadvantages": [
+        "Requires more careful URL extraction logic than a narrow regex"
+      ],
+      "recommended_when": [
+        "Turning MMIS export clicks into direct HTTP downloads"
+      ],
+      "status": "confirmed",
+      "reusable": true,
+      "notes": [
+        "Capture the full href passed into openEncodedURL, not only the _tbldnld segment."
+      ]
+    },
+    {
+      "id": "table-filtering-uses-setvalue-plus-filterrows-events",
+      "title": "MMIS table filters use setvalue and filterrows events",
+      "description": "For grid-filter style MMIS queries, typing into filter boxes is replayed as one or more setvalue events, followed by filterrows on the filter-row target.",
+      "applicable_when": [
+        "Converting MMIS table filter UI interactions into HTTP requests"
+      ],
+      "advantages": [
+        "Removes the need for Playwright typing and Enter presses",
+        "Allows deterministic query execution with fewer requests"
+      ],
+      "disadvantages": [
+        "Requires exact target IDs for each filter field"
+      ],
+      "recommended_when": [
+        "The query view already exposes filter-row textboxes and download button in the same table"
+      ],
+      "status": "confirmed",
+      "reusable": true,
+      "notes": [
+        "Observed pattern for B-level open fault notices: setvalue on depot field, then setvalue on level field together with filterrows on m6a7dfd2f_tbod_tfrow-tr.",
+        "The filter request reused the same pageseqnum and incremented xhrseqnum."
+      ]
+    }
+  ],
+  "commonErrors": [
+    {
+      "id": "maximo-shared-session-event-rejection",
+      "title": "Direct event replay may trigger shared-session rejection",
+      "description": "Even after successful request-driven login, direct POST requests to maximo.jsp can return a deferred redirect to exit.jsp?sharedSession=1.",
+      "applicable_when": [
+        "Replaying Maximo UI events using requests.Session"
+      ],
+      "advantages": [
+        "Documents a critical protocol limitation early"
+      ],
+      "disadvantages": [
+        "Blocks pure HTTP completion of some MMIS workflows"
+      ],
+      "recommended_when": [
+        "Assessing feasibility of removing browser automation entirely"
+      ],
+      "status": "confirmed",
+      "reusable": true,
+      "notes": [
+        "This was traced to stale start center PAGESEQNUM/CSRFTOKEN during changeapp replay.",
+        "Refresh start center once before the first changeapp event."
+      ]
+    },
+    {
+      "id": "python-playwright-winerror-5-in-sandbox",
+      "title": "Python Playwright fallback can fail with WinError 5 in the current sandbox",
+      "description": "Launching Playwright from Python in this environment can fail before browser start with WinError 5 access denied on Windows async subprocess plumbing.",
+      "applicable_when": [
+        "Using Playwright Python as fallback from mmisClient.py inside the current Codex environment"
+      ],
+      "advantages": [
+        "Explains why MCP Playwright may work while Python Playwright does not"
+      ],
+      "disadvantages": [
+        "Prevents in-process browser fallback verification here"
+      ],
+      "recommended_when": [
+        "Choosing between MCP browser tools and Python Playwright fallback"
+      ],
+      "status": "confirmed",
+      "reusable": true,
+      "notes": [
+        "Do not assume MCP Playwright behavior matches Python Playwright behavior in sandboxed environments."
+      ]
+    }
+  ],
+  "performanceTips": [
+    {
+      "id": "prefer-request-driven-login",
+      "title": "Move login to HTTP first for immediate speed gains",
+      "description": "Replacing login clicks and waits with a single request-driven bootstrap gives the largest early speed improvement.",
+      "applicable_when": [
+        "Optimizing an existing Playwright-heavy MMIS flow"
+      ],
+      "advantages": [
+        "Allows session reuse",
+        "Cuts repeated UI waits"
+      ],
+      "disadvantages": [
+        "Downstream protocol may still require deeper analysis"
+      ],
+      "recommended_when": [
+        "Refactoring any existing MMIS skill for speed"
+      ],
+      "status": "confirmed",
+      "reusable": true,
+      "notes": [
+        "Do not wait for the entire flow to be request-driven before adopting request-driven login."
+      ]
+    },
+    {
+      "id": "log-step-timing-and-request-retries",
+      "title": "Log step timing and retry activity for every MMIS core flow",
+      "description": "MMIS automation debugging becomes much faster when each major step logs start, end, duration, and retry activity instead of only final success or failure.",
+      "applicable_when": [
+        "Optimizing MMIS client stability",
+        "Investigating slow or flaky MMIS automation"
+      ],
+      "advantages": [
+        "Makes bottlenecks visible immediately",
+        "Makes retry behavior observable without manual tracing"
+      ],
+      "disadvantages": [
+        "Slightly more verbose logging output"
+      ],
+      "recommended_when": [
+        "Building or refactoring reusable MMIS core clients"
+      ],
+      "status": "confirmed",
+      "reusable": true,
+      "notes": [
+        "Return step metrics together with the final JSON result when practical.",
+        "Log request status, duration, and attempt number."
+      ]
+    },
+    {
+      "id": "reuse-session-cache",
+      "title": "Reuse cached session whenever valid",
+      "description": "Persist cookies and parsed page state so repeated MMIS operations do not start from login each time.",
+      "applicable_when": [
+        "Multiple MMIS automations run in the same work period"
+      ],
+      "advantages": [
+        "Improves perceived responsiveness",
+        "Reduces repeated authentication overhead"
+      ],
+      "disadvantages": [
+        "Requires validation and expiry handling"
+      ],
+      "recommended_when": [
+        "Building reusable MMIS client libraries"
+      ],
+      "status": "confirmed",
+      "reusable": true,
+      "notes": [
+        "Validate cached sessions before trusting them."
+      ]
+    }
+  ],
+  "stableWorkflows": [
+    {
+      "id": "download-and-format-unprocessed-fault-notices",
+      "title": "Download unprocessed fault notices, then run Excel formatter",
+      "description": "The stable end-to-end workflow is: establish session, enter fault notice management, apply the fixed saved query, download 故障通報管理MMDD.xlsx, then run the dedicated Excel formatter.",
+      "applicable_when": [
+        "Automating 本段未處理通報(車輛配屬段)"
+      ],
+      "advantages": [
+        "Keeps post-processing deterministic",
+        "Separates MMIS acquisition from Excel transformation"
+      ],
+      "disadvantages": [
+        "Still depends on the saved query name and current MMIS page structure remaining stable"
+      ],
+      "recommended_when": [
+        "Implementing the current main MMIS automation use case"
+      ],
+      "status": "confirmed",
+      "reusable": true,
+      "notes": [
+        "The MMIS acquisition path is now fully request-driven for login, app switch, query apply, and file download.",
+        "Acquisition and formatting should remain decoupled.",
+        "Excel formatting is already stable as a separate script."
+      ]
+    },
+    {
+      "id": "phase1-playwright-query-should-bootstrap-from-shared-http-login",
+      "title": "Phase 1 Playwright MMIS queries should bootstrap from shared HTTP login",
+      "description": "When a new MMIS query skill is still in browser-driven Phase 1, reuse MMISClient.login() to obtain cookies and session cache first, then inject those cookies into Playwright before navigating to start center.",
+      "applicable_when": [
+        "Building a new MMIS query skill in Playwright before HTTP refactor"
+      ],
+      "advantages": [
+        "Reuses the validated login path",
+        "Keeps browser automation focused on the query-only portion",
+        "Makes Phase 2 HTTP migration easier because login is already shared"
+      ],
+      "disadvantages": [
+        "Still depends on Playwright runtime availability"
+      ],
+      "recommended_when": [
+        "A new MMIS flow needs browser correctness first but should remain aligned with the long-term HTTP architecture"
+      ],
+      "status": "experimental",
+      "reusable": true,
+      "notes": [
+        "If injected cookies do not authenticate the browser, only then fall back to visible page login inside Playwright.",
+        "Keep wrapper interfaces stable so Phase 2 can swap the implementation without changing the skill entrypoint."
+      ]
+    },
+    {
+      "id": "open-b-level-fault-notices-http-first-with-playwright-fallback",
+      "title": "Open B-level fault notices can run HTTP-first with Playwright fallback",
+      "description": "The 本段未結案 B 級故障通報 flow can be completed through HTTP by reusing the same app-switch and saved-query pattern, then sending setvalue/filterrows events and downloading the resulting _tbldnld link. Keep the validated Playwright script as fallback only.",
+      "applicable_when": [
+        "Automating 故障通報未結案清單 with depot and level filters"
+      ],
+      "advantages": [
+        "Cuts runtime substantially compared with full browser automation",
+        "Preserves a working fallback when MMIS patterns change"
+      ],
+      "disadvantages": [
+        "Still depends on current field target IDs remaining stable"
+      ],
+      "recommended_when": [
+        "Implementing the Phase 2 version of the B-level open fault notice skill"
+      ],
+      "status": "confirmed",
+      "reusable": true,
+      "notes": [
+        "Observed runtime was about 1.7 seconds in HTTP mode with session reuse.",
+        "Fallback should call the validated Playwright script only after HTTP failure."
+      ]
+    }
+  ],
+  "toolingNotes": [
+    {
+      "id": "use-knowledge-before-and-after-development",
+      "title": "Always read and update this knowledge around MMIS development",
+      "description": "New MMIS skills should begin by consulting existing knowledge and end by writing back validated reusable lessons.",
+      "applicable_when": [
+        "Any MMIS skill creation, refactor, or bug fix"
+      ],
+      "advantages": [
+        "Avoids rediscovering the same protocol and failure patterns",
+        "Improves consistency across MMIS skills"
+      ],
+      "disadvantages": [
+        "Requires discipline to keep knowledge updated"
+      ],
+      "recommended_when": [
+        "At the start and end of every MMIS automation task"
+      ],
+      "status": "confirmed",
+      "reusable": true,
+      "notes": [
+        "Prefer concise, structured, high-signal updates."
+      ]
+    },
+    {
+      "id": "force-utf8-for-wrapper-subprocesses",
+      "title": "Force UTF-8 when wrapper scripts launch Python MMIS tools",
+      "description": "When wrapper scripts invoke MMIS Python tools, set PYTHONIOENCODING=utf-8 so Chinese logs remain readable in console output.",
+      "applicable_when": [
+        "Launching MMIS client scripts through thin wrapper scripts"
+      ],
+      "advantages": [
+        "Prevents garbled Traditional Chinese logs",
+        "Improves observability during live operations"
+      ],
+      "disadvantages": [
+        "Requires wrapper maintenance discipline"
+      ],
+      "recommended_when": [
+        "Any wrapper forwards console output from MMIS Python tools"
+      ],
+      "status": "confirmed",
+      "reusable": true,
+      "notes": [
+        "Apply this in wrapper scripts, not only inside the core client."
+      ]
+    }
+  ]
+}

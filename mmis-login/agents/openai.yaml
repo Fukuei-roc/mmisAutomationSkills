@@ -1,0 +1,4 @@
+interface:
+  display_name: "MMIS Login"
+  short_description: "Log into MMIS and keep the session for follow-up tasks."
+  default_prompt: "Log into MMIS, verify success, and keep the session for follow-up automation."
