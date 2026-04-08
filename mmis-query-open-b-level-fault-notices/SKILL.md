@@ -37,7 +37,7 @@ Playwright fallback：
   - `setvalue` 配屬段
   - `setvalue + filterrows` 等級與查詢
 - 直接下載報表
-- 依 `level` 參數儲存為 `{level}級故障通報管理MMDD.xlsx`
+- 依 `level` 參數儲存為 `{單位簡稱}{level}級未結案故障通報MMDD.xlsx`
 
 ## 參數
 
@@ -80,7 +80,7 @@ Playwright fallback：
 - 已成功套用 `故障通報未結案清單`
 - 篩選條件 `level/depot` 已送出
 - 已成功觸發下載
-- 已將檔案覆寫存成 `{level}級故障通報管理MMDD.xlsx`
+- 已將檔案覆寫存成 `{單位簡稱}{level}級未結案故障通報MMDD.xlsx`
 
 ## 失敗回報
 

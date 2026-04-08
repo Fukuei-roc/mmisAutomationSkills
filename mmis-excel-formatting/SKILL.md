@@ -1,16 +1,24 @@
 ---
 name: mmis-excel-formatting
-description: 依檔名自動判斷並格式化 MMIS 匯出的 Excel 檔案。當使用者要求整理最近下載的 MMIS Excel 檔、或已知要套用 `故障通報管理` 類型格式時使用。支援自動偵測檔案類型與透過參數指定檔案類型。
+description: 依檔名自動判斷並格式化 MMIS 匯出的 Excel 檔案。當使用者要求整理最近下載的 MMIS Excel 檔、或已知要套用 `故障通報管理`、`未結案故障通報` 類型格式時使用。支援自動偵測檔案類型與透過參數指定檔案類型。
 ---
 
 # MMIS Excel Formatting
 
 此 skill 只負責處理 MMIS 匯出的 Excel 檔案，不負責登入、查詢、下載。
 
+目前已重構為共用 Excel 處理引擎：
+
+- `runFormatting(file_path, file_type=None)`
+- `detectFileType(file_name)`
+- `getFormatConfig(file_type)`
+- `applyFormatting(ws, config, result)`
+
 ## 何時使用
 
 - 使用者要求整理最近下載的 MMIS Excel 檔。
 - 使用者要求整理 `故障通報管理` 類型 Excel。
+- 使用者要求整理 `未結案故障通報` 類型 Excel。
 - 使用者要求將工作表 `故障通報管理 的清單` 的字型大小統一為 12。
 - 使用者要求將工作表 `故障通報管理 的清單` 套用整體版面格式。
 - 使用者要求依 `發生日期` 及 `車組/車號` 排序後直接覆寫原檔。
@@ -27,8 +35,9 @@ description: 依檔名自動判斷並格式化 MMIS 匯出的 Excel 檔案。當
 - 路徑中的空格與特殊字元要原樣處理，不可自行簡化或截斷。
 - 預設優先接續處理最近產生的 `.xlsx` 檔案。
 - 若 `--file-type auto`，先根據檔名判斷 formatter。
+- 若檔名包含 `未結案故障通報`，套用 `open_fault_notice` formatter。
 - 若檔名包含 `故障通報管理` 或 `未處理故障通報`，套用 `fault_notice` formatter。
-- 也可用 `--file-type fault_notice` 強制指定 formatter。
+- 也可用 `--file-type fault_notice` 或 `--file-type open_fault_notice` 強制指定 formatter。
 - 若找不到目標檔案，停止並列出目標資料夾實際存在的檔案名稱。
 - 若工作表 `故障通報管理 的清單` 不存在，停止並列出所有工作表名稱。
 - 若欄位 `發生日期` 或 `車組/車號` 不存在，停止並列出實際欄位名稱。
@@ -56,26 +65,30 @@ description: 依檔名自動判斷並格式化 MMIS 匯出的 Excel 檔案。當
 
 1. 找出最近下載的 `.xlsx` 檔，或使用明確指定的檔案路徑。
 2. 根據檔名或 `--file-type` 判斷 formatter。
-3. 若檔名包含 `故障通報管理` 或 `未處理故障通報`，套用 `formatFaultNoticeExcel(file_path)`。
-4. 開啟該檔案。
-5. 確認工作表 `故障通報管理 的清單` 存在。
-6. 將整個工作表使用中的所有儲存格套用字型 `新細明體`、大小 `12`。
-7. 確認欄位 `發生日期` 與 `車組/車號` 存在。
-8. 以整個資料表為範圍排序：
+3. 若檔名包含 `未結案故障通報`，套用 `open_fault_notice` config。
+4. 若檔名包含 `故障通報管理` 或 `未處理故障通報`，套用 `fault_notice` config。
+5. 開啟該檔案。
+6. 確認工作表 `故障通報管理 的清單` 存在。
+7. 依 config 執行共用流程：
+   - 刪除欄位
+   - 排序
+   - 套用全表字型
+   - 套用全表對齊
+   - 覆蓋標題列對齊
+   - AutoFit
+   - 套用指定欄寬
+8. `fault_notice` 仍保留既有特殊處理：
+   - 插入 `車號` 欄
+   - 寫入 `車號` 值
+   - 將 `C1` 設為粗體
+9. `open_fault_notice` 套用下列排序：
+   - 第一排序鍵：`事故等級`
+   - 第二排序鍵：`發生日期`
+   - 第三排序鍵：`車組/車號`
+10. `fault_notice` 仍維持既有排序：
    - 第一排序鍵：`發生日期`，由舊到新
    - 第二排序鍵：`車組/車號`，由小到大
-9. 在 B 與 C 欄之間插入新欄位，將 `C1` 設為 `車號`。
-10. 將整個工作表使用中的所有儲存格套用水平靠左、垂直靠上。
-11. 將 `C1` 設為粗體。
-12. 依欄位名稱找出指定欄位，並由右到左刪除。
-13. 對每一列資料：
-   - 從 B 欄字串解析尾端連續數字
-   - 若解析出 `n` 且 `1000 <= n < 10000`，寫入 `INT(n / 10)`
-   - 否則直接寫入 `n`
-   - 若無法解析尾端數字，寫入空白
-14. 將第 1 列標題列覆蓋為水平置中、垂直置中。
-15. 依內容自動調整所有欄位欄寬。
-16. 直接覆寫原檔。
+11. 直接覆寫原檔。
 
 ## 成功判斷
 
@@ -151,6 +164,10 @@ python C:\Users\NMMIS\.codex\skills\mmis-excel-formatting\scripts\format_mmis_ex
 python C:\Users\NMMIS\.codex\skills\mmis-excel-formatting\scripts\format_mmis_excel.py --file-type fault_notice
 ```
 
+```powershell
+python C:\Users\NMMIS\.codex\skills\mmis-excel-formatting\scripts\format_mmis_excel.py --file-type open_fault_notice
+```
+
 腳本會輸出 JSON，包含：
 
 - `file_found`
@@ -159,7 +176,9 @@ python C:\Users\NMMIS\.codex\skills\mmis-excel-formatting\scripts\format_mmis_ex
 - `detected_type`
 - `selected_by`
 - `format_applied`
+- `applied_config`
 - `sorted`
+- `sorting_applied`
 - `saved`
 - `reason`
 - `existing_files`
@@ -171,3 +190,4 @@ python C:\Users\NMMIS\.codex\skills\mmis-excel-formatting\scripts\format_mmis_ex
 - `value_range`
 - `value_verification`
 - `unparsed_count`
+- `custom_column_widths_applied`

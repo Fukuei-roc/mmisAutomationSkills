@@ -134,7 +134,7 @@ def depot_short_name(depot_name: str) -> str:
 
 
 def generate_level_filename(*, depot_name: str, level_display: str) -> str:
-    return f"{depot_short_name(depot_name)}{level_display}級故障通報管理{mmdd_today()}.xlsx"
+    return f"{depot_short_name(depot_name)}{level_display}級未結案故障通報{mmdd_today()}.xlsx"
 
 
 def resolve_filename_conflict(target_dir: Path, filename: str) -> Path:

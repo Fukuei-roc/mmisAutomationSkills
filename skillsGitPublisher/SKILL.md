@@ -100,6 +100,56 @@ type(scope): milestone summary
 - working tree 為空：不要 commit，直接回報無變更
 - 沒有可提交的變更：直接回報 `no changes`
 
+## 已知問題與解法
+
+### 1. dubious ownership
+
+若 `git` 回報：
+
+```text
+fatal: detected dubious ownership in repository at 'C:/Users/NMMIS/.codex/skills'
+```
+
+代表目前執行身分與資料夾擁有者不一致。只針對這個 repo 加入 safe.directory：
+
+```powershell
+git config --global --add safe.directory C:/Users/NMMIS/.codex/skills
+```
+
+不要把整個磁碟或過度寬鬆的路徑加入 safe.directory。
+
+### 2. sandbox 內 GitHub 憑證提示失敗
+
+若 `git push` 在 sandbox 內失敗，且錯誤包含：
+
+- `couldn't create signal pipe, Win32 error 5`
+- `failed to execute prompt script`
+- `could not read Username for 'https://github.com'`
+
+代表 Git 需要呼叫本機憑證機制，但 sandbox 無法正常啟動該提示流程。
+
+處理方式：
+
+1. 保留本地 commit 結果
+2. 改在非 sandbox 模式重跑 push
+3. 沿用本機既有 Git Credential Manager / gh auth / SSH 驗證
+
+若重跑後 `working tree` 已是乾淨狀態，先用 `git log --oneline -n 3` 確認 commit 是否已建立，再直接執行：
+
+```powershell
+git -C "C:\Users\NMMIS\.codex\skills" push -u origin <current-branch>
+```
+
+### 3. 首次發佈可能是 master，不一定是 main
+
+不要硬寫 `origin main`。先檢查實際分支：
+
+```powershell
+git -C "C:\Users\NMMIS\.codex\skills" branch --show-current
+```
+
+若目前分支是 `master`，就推 `origin master`；若之後改成 `main`，再推 `origin main`。
+
 ## 執行方式
 
 優先執行 helper script：
