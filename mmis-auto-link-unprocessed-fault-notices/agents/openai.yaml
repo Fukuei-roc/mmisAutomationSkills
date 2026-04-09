@@ -1,0 +1,4 @@
+interface:
+  display_name: "MMIS Auto Link Unprocessed Fault Notices"
+  short_description: "Batch link today's unprocessed fault notice Excel rows to 1A work orders."
+  default_prompt: "Auto-process today's 本段未處理故障通報 Excel and write linked 1A work orders back to column I."

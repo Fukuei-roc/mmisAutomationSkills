@@ -382,7 +382,7 @@
     {
       "id": "1a-work-order-linked-fault-notices-playwright-workflow",
       "title": "1A work-order linked fault notices are stable with Playwright plus HTTP login bootstrap",
-      "description": "The MMIS 動力車日檢(1A) linked-fault-notice lookup is stable as a Playwright workflow when the browser session is bootstrapped from MMISClient.login(), then the script waits for the zz_pmwo1a app URL and the query fields before searching the work order. The refactored version removes all screenshot I/O and is structured for repeated subroutine-style calls.",
+      "description": "The MMIS 動力車日檢(1A) linked-fault-notice lookup is stable as a Playwright workflow when the browser session is bootstrapped from MMISClient.login(), then the script waits for the zz_pmwo1a app URL and the query fields before searching the work order. The refactored version removes screenshot I/O from the reusable baseline and is structured for repeated subroutine-style calls.",
       "applicable_when": [
         "Automating MMIS 動力車日檢(1A) work-order detail lookup",
         "Need to retrieve fault notices linked to one 1A work order",
@@ -408,7 +408,45 @@
         "Validated result patterns with live work orders: 115-1A-23391 (3 linked notices), 115-1A-25365 (1 linked notice), 115-1A-22216 (2 linked notices), 115-1A-05159 (0 linked notices), and 115-1A-15159 (work order not found).",
         "Waiting for the zz_pmwo1a URL plus visible query inputs is more reliable than waiting only on networkidle after clicking 動力車日檢(1A).",
         "For high-frequency internal use, prefer clear step logs over screenshots or debug artifacts.",
-        "Keep browser, context, and page reusable so future batch lookup can avoid reopening Playwright per work order."
+        "Keep browser, context, and page reusable so future batch lookup can avoid reopening Playwright per work order.",
+        "When a debug-only screenshot branch is added temporarily, remove it again before treating the helper as the stable reusable baseline.",
+        "The stable reusable helper should return standardized JSON with ok/work_order/fault_notices/count and should not depend on screenshot side effects."
+      ]
+    },
+    {
+      "id": "auto-link-unprocessed-fault-notices-batch-workflow",
+      "title": "Batch auto-linking unprocessed fault notices to 1A work orders requires exact 1A filter mapping",
+      "description": "The 本段未處理故障通報 batch auto-link workflow is stable when it reuses one MMIS login and one 1A Playwright page, then queries each row with the exact 1A filter mapping: C1=新竹機務段, C2 cleared to empty by keyboard, C3=車號, and C11=>YYYY/M/D. Results are then written back to Excel column I without reopening the browser per row.",
+      "applicable_when": [
+        "Building batch linkage from 本段未處理故障通報 Excel rows to 1A daily-check work orders",
+        "Automating repeated 1A list queries from Excel source data",
+        "Writing MMIS query results back into Excel while preserving the original report structure"
+      ],
+      "advantages": [
+        "Avoids repeated login and browser startup cost across rows",
+        "Makes 1A query conditions explicit and verifiable before Enter",
+        "Allows partial success without aborting the whole batch"
+      ],
+      "disadvantages": [
+        "Still depends on the current 1A query-row field layout remaining stable",
+        "Re-entering the 1A app can still dominate batch runtime when the page does not return cleanly to the list"
+      ],
+      "recommended_when": [
+        "Automating the daily linkage of 本段未處理故障通報 rows to 日檢工單",
+        "Need to keep batch processing resilient even when some rows return no match"
+      ],
+      "status": "confirmed",
+      "reusable": true,
+      "notes": [
+        "The correct live test case is 新竹機務段 + 890 + >2026/04/05, which successfully returns 115-1A-26331.",
+        "Do not put 車號 into C1. C1 is the depot field and must contain 新竹機務段.",
+        "C2 may contain a default depot-like value and must be cleared using keyboard actions such as Ctrl+A plus Backspace/Delete, then verified empty.",
+        "C3 is the correct 車組/車號 filter field for this workflow.",
+        "C11 is the correct 檢修日期 field and the query must use a leading > condition.",
+        "Normalize query dates to >YYYY/M/D or >YYYY/MM/DD only once; avoid creating a duplicated >> prefix.",
+        "Before pressing Enter, log the actual values of C1, C2, C3, and C11 so field-mapping mistakes are visible immediately.",
+        "A batch run on 本段未處理故障通報0409.xlsx produced 15 rows with 1 confirmed hit and 14 no-result rows; no-result is valid business output and should not be treated as a batch failure by itself.",
+        "After finding a work order, failure to return cleanly to the list page should be treated as non-fatal for that row if the work order number has already been captured."
       ]
     }
   ],
