@@ -2,7 +2,7 @@
   "meta": {
     "name": "mmis-dev-knowledge",
     "version": 1,
-    "last_updated": "2026-04-08",
+    "last_updated": "2026-04-09",
     "purpose": "Store reusable MMIS automation engineering knowledge for future skill development."
   },
   "loginStrategies": [
@@ -377,6 +377,35 @@
       "notes": [
         "Observed runtime was about 1.7 seconds in HTTP mode with session reuse.",
         "Fallback should call the validated Playwright script only after HTTP failure."
+      ]
+    },
+    {
+      "id": "1a-work-order-linked-fault-notices-playwright-workflow",
+      "title": "1A work-order linked fault notices are stable with Playwright plus HTTP login bootstrap",
+      "description": "The MMIS 動力車日檢(1A) linked-fault-notice lookup is stable as a Playwright workflow when the browser session is bootstrapped from MMISClient.login(), then the script waits for the zz_pmwo1a app URL and the query fields before searching the work order.",
+      "applicable_when": [
+        "Automating MMIS 動力車日檢(1A) work-order detail lookup",
+        "Need to retrieve fault notices linked to one 1A work order",
+        "Need browser-only traversal into the work-order detail page"
+      ],
+      "advantages": [
+        "Handles 0 results, 1 result, multiple linked fault notices, and not-found cases",
+        "Reuses the faster shared HTTP login path before opening Playwright",
+        "Supports screenshot capture and detail-page validation"
+      ],
+      "disadvantages": [
+        "Still depends on Playwright runtime availability",
+        "App open remains slower than the existing HTTP-only MMIS list queries"
+      ],
+      "recommended_when": [
+        "A MMIS workflow must open the 1A detail page and scrape linked notices from the rendered UI"
+      ],
+      "status": "confirmed",
+      "reusable": true,
+      "notes": [
+        "Validated result patterns with live work orders: 115-1A-23391 (3 linked notices), 115-1A-25365 (1 linked notice), 115-1A-05159 (0 linked notices), and 115-1A-15159 (work order not found).",
+        "Waiting for the zz_pmwo1a URL plus visible query inputs is more reliable than waiting only on networkidle after clicking 動力車日檢(1A).",
+        "Save a screenshot after entering the detail page so later troubleshooting can confirm the exact work-order state."
       ]
     }
   ],

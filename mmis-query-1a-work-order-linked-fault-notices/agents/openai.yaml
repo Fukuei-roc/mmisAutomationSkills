@@ -1,0 +1,4 @@
+interface:
+  display_name: "MMIS 1A Linked Fault Notices"
+  short_description: "Query MMIS 1A work orders for linked fault notices."
+  default_prompt: "Query MMIS for the fault notices linked to 1A work order 115-1A-23391."
