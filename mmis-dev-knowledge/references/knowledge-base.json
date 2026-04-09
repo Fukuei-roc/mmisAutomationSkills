@@ -458,6 +458,34 @@
       "notes": [
         "Apply this in wrapper scripts, not only inside the core client."
       ]
+    },
+    {
+      "id": "use-the-web-data-location-guide-for-playwright-analysis",
+      "title": "Use the MMIS web data location guide before designing Playwright selectors",
+      "description": "When a MMIS task depends on browser-side inspection, selector design, table scraping, or DOM-based troubleshooting, read the dedicated web data location guide first instead of improvising selectors directly from the visible UI.",
+      "applicable_when": [
+        "Analyzing MMIS pages with Chrome DevTools",
+        "Building a new Playwright-based MMIS query",
+        "Debugging why visible page data does not match extracted values",
+        "Scraping MMIS table rows, td cells, span titles, or filter inputs"
+      ],
+      "advantages": [
+        "Improves selector stability",
+        "Reduces mistakes caused by dynamic Maximo ids",
+        "Makes empty-value, no-data, and multi-row handling more deliberate"
+      ],
+      "disadvantages": [
+        "Adds one more reference file to consult during browser-side MMIS work"
+      ],
+      "recommended_when": [
+        "Any Playwright or DevTools-driven MMIS automation task"
+      ],
+      "status": "confirmed",
+      "reusable": true,
+      "notes": [
+        "See references/mmis-web-data-location-guide.md.",
+        "The guide covers DevTools inspection, selector priority, table row/column patterns, and Playwright waiting strategy."
+      ]
     }
   ]
 }

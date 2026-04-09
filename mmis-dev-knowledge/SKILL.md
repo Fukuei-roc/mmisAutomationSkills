@@ -21,6 +21,7 @@ Use it in two moments:
 Start with:
 
 - [knowledge-base.json](references/knowledge-base.json)
+- [mmis-web-data-location-guide.md](references/mmis-web-data-location-guide.md) when the task involves Playwright, selector design, DOM inspection, Maximo table scraping, or browser-side MMIS debugging.
 
 Focus on these top-level sections:
 
@@ -30,6 +31,15 @@ Focus on these top-level sections:
 - `performanceTips`
 - `stableWorkflows`
 - `toolingNotes`
+
+Use the guide file for:
+
+- Chrome DevTools inspection workflow
+- MMIS / Maximo DOM structure analysis
+- selector stability rules
+- table row / column locating patterns
+- distinguishing empty values from missing data
+- Playwright locator and wait strategy
 
 When planning a new MMIS skill:
 
