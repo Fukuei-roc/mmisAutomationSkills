@@ -1,6 +1,6 @@
 ---
 name: mmis-query-1a-work-order-linked-fault-notices
-description: 使用 Playwright 查詢 MMIS「動力車日檢(1A)」工單所勾稽的故障通報資料。當使用者提供 1A 工單號、要求查詢工單勾稽的故障通報清單、或需要截圖與明細頁驗證時使用。輸入為工作單號，輸出為故障通報清單，支援 0 筆、1 筆與多筆。
+description: 使用 Playwright 查詢 MMIS「動力車日檢(1A)」工單所勾稽的故障通報資料。當使用者提供 1A 工單號、要求查詢工單勾稽的故障通報清單、或需要批次重用此查詢能力時使用。輸入為工作單號，輸出為故障通報清單，支援 0 筆、1 筆與多筆。
 ---
 
 # MMIS Query 1A Work Order Linked Fault Notices
@@ -28,7 +28,8 @@ python C:\Users\NMMIS\.codex\skills\mmis-query-1a-work-order-linked-fault-notice
 - 依工作單號查詢
 - 進入第一筆工單明細
 - 擷取所有勾稽故障通報 `span[title]`
-- 截圖存到 `C:\Users\NMMIS\Downloads`
+- 提供可重用主介面 `getLinkedFaultNotices(work_order_no)`
+- 預留批次介面 `getLinkedFaultNoticesBatch(work_order_list)`
 
 ## 參數
 
@@ -42,6 +43,8 @@ python C:\Users\NMMIS\.codex\skills\mmis-query-1a-work-order-linked-fault-notice
 - Playwright 只負責後續 UI 查詢與明細頁擷取
 - 不使用固定 sleep，改用 `wait_for_selector`、`networkidle`、`locator`
 - selector 優先用文字、href 結構、`contains(@id, ...)`，不要完全依賴單一動態 id
+- 不保留任何截圖邏輯，debug 以 log 為主
+- 優先重用既有 session 與同一個 browser/page 狀態
 
 ## 成功判斷
 
@@ -51,7 +54,6 @@ python C:\Users\NMMIS\.codex\skills\mmis-query-1a-work-order-linked-fault-notice
 - 已成功進入 `動力車日檢(1A)`
 - 已成功查到工作單並進入明細
 - 明細頁工作單號與輸入一致
-- 已成功儲存截圖
 - 已成功回傳 `fault_notices`
 
 ## 回傳格式
@@ -60,8 +62,10 @@ python C:\Users\NMMIS\.codex\skills\mmis-query-1a-work-order-linked-fault-notice
 
 ```json
 {
+  "ok": true,
   "work_order": "115-1A-23391",
-  "fault_notices": ["1150331-39", "1150331-49"]
+  "fault_notices": ["1150331-39", "1150331-49"],
+  "count": 2
 }
 ```
 
@@ -69,8 +73,10 @@ python C:\Users\NMMIS\.codex\skills\mmis-query-1a-work-order-linked-fault-notice
 
 ```json
 {
+  "ok": true,
   "work_order": "115-1A-23391",
-  "fault_notices": []
+  "fault_notices": [],
+  "count": 0
 }
 ```
 
@@ -78,7 +84,10 @@ python C:\Users\NMMIS\.codex\skills\mmis-query-1a-work-order-linked-fault-notice
 
 ```json
 {
-  "error": "找不到工作單"
+  "ok": false,
+  "error": "找不到工作單",
+  "fault_notices": [],
+  "count": 0
 }
 ```
 
@@ -91,6 +100,5 @@ python C:\Users\NMMIS\.codex\skills\mmis-query-1a-work-order-linked-fault-notice
 - 是否找到工單
 - 是否成功進入明細
 - 故障通報筆數
-- 截圖路徑
 - `log_file`
 - 若失敗，具體原因
