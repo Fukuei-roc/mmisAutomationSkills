@@ -22,6 +22,7 @@ Start with:
 
 - [knowledge-base.json](references/knowledge-base.json)
 - [mmis-web-data-location-guide.md](references/mmis-web-data-location-guide.md) when the task involves Playwright, selector design, DOM inspection, Maximo table scraping, or browser-side MMIS debugging.
+- [mmis-query-workflow-and-debug-guide.md](references/mmis-query-workflow-and-debug-guide.md) when the task involves MMIS query execution rules, filter-row input behavior, Enter-triggered filtering, date formatting, batch query stabilization, or debugging why a query returns the wrong result set.
 
 Focus on these top-level sections:
 
@@ -40,6 +41,14 @@ Use the guide file for:
 - table row / column locating patterns
 - distinguishing empty values from missing data
 - Playwright locator and wait strategy
+
+Use the query workflow guide for:
+
+- query trigger rules such as focus-before-Enter
+- switching to `所有記錄` before filtering
+- field mapping and value-format rules
+- common MMIS query failures and their fixes
+- batch query debug strategy with logs and screenshots
 
 When planning a new MMIS skill:
 

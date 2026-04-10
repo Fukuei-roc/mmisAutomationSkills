@@ -2,7 +2,7 @@
   "meta": {
     "name": "mmis-dev-knowledge",
     "version": 1,
-    "last_updated": "2026-04-09",
+    "last_updated": "2026-04-10",
     "purpose": "Store reusable MMIS automation engineering knowledge for future skill development."
   },
   "loginStrategies": [
@@ -229,6 +229,100 @@
       "notes": [
         "Do not assume MCP Playwright behavior matches Python Playwright behavior in sandboxed environments."
       ]
+    },
+    {
+      "id": "maximo-enter-does-not-trigger-without-focus",
+      "title": "MMIS filter-row Enter can fail if the target field does not have focus",
+      "description": "In MMIS / Maximo table filter rows, pressing Enter is not reliable unless the intended input field is the active element. Sending Enter from page-level keyboard context can leave the query untriggered.",
+      "applicable_when": [
+        "Triggering MMIS list filtering from Playwright",
+        "Using Enter to execute a query after filling filter-row inputs"
+      ],
+      "advantages": [
+        "Documents a high-impact cause of false no-result behavior"
+      ],
+      "disadvantages": [
+        "Requires one extra focus verification step before Enter"
+      ],
+      "recommended_when": [
+        "Any MMIS query relies on Enter from a filter textbox"
+      ],
+      "status": "confirmed",
+      "reusable": true,
+      "notes": [
+        "Click the final query field, confirm it is document.activeElement, then send locator.press(\"Enter\").",
+        "Do not rely on page.keyboard.press(\"Enter\") alone for MMIS filter rows."
+      ]
+    },
+    {
+      "id": "maximo-no-result-text-can-be-specific-per-app",
+      "title": "MMIS no-result state may use app-specific text such as 沒有要顯示的列。",
+      "description": "A MMIS list can be in a valid no-result state even when generic phrases like 查無資料 or 沒有資料 are absent. In 動力車日檢(1A), a true empty result may render as 沒有要顯示的列。",
+      "applicable_when": [
+        "Detecting whether a MMIS query returned zero rows",
+        "Distinguishing no-result from query-not-triggered states"
+      ],
+      "advantages": [
+        "Prevents valid no-result cases from being misclassified as unstable query state"
+      ],
+      "disadvantages": [
+        "Requires inspecting the live page text for each app"
+      ],
+      "recommended_when": [
+        "Building no-result detection for a new MMIS app"
+      ],
+      "status": "confirmed",
+      "reusable": true,
+      "notes": [
+        "For 1A daily-check queries, include 沒有要顯示的列。 in no-result pattern matching."
+      ]
+    },
+    {
+      "id": "stale-result-row-can-masquerade-as-current-query-result",
+      "title": "A previous result row can remain visible long enough to be mistaken for the current query result",
+      "description": "After sending a new MMIS query, the first visible result row may still belong to the previous query if the table has not fully refreshed yet.",
+      "applicable_when": [
+        "Sequential MMIS list queries on the same page",
+        "Batch workflows that reuse one page state across many searches"
+      ],
+      "advantages": [
+        "Explains why a query can appear to have results even when it should not"
+      ],
+      "disadvantages": [
+        "Requires comparing result signatures before and after the query"
+      ],
+      "recommended_when": [
+        "Reusing one MMIS list page for multiple row-by-row queries"
+      ],
+      "status": "confirmed",
+      "reusable": true,
+      "notes": [
+        "Capture the first-result signature before Enter and compare it after the query.",
+        "Combine signature comparison with explicit no-result text detection."
+      ]
+    },
+    {
+      "id": "filter-default-values-may-survive-fill-empty",
+      "title": "MMIS filter default values may not clear cleanly with fill(\"\")",
+      "description": "Some MMIS filter-row textboxes keep a default or previous value even after fill(\"\") is used, which leads to hidden query-condition contamination.",
+      "applicable_when": [
+        "Clearing default filter values before a new MMIS search",
+        "Reusing the same list page for multiple queries"
+      ],
+      "advantages": [
+        "Documents a common source of wrong query conditions"
+      ],
+      "disadvantages": [
+        "Requires keyboard-based clearing plus post-clear verification"
+      ],
+      "recommended_when": [
+        "A filter field starts with a default value or sometimes retains the previous row's data"
+      ],
+      "status": "confirmed",
+      "reusable": true,
+      "notes": [
+        "Use click + Ctrl+A + Backspace/Delete, then verify the field is truly empty."
+      ]
     }
   ],
   "performanceTips": [
@@ -416,7 +510,7 @@
     {
       "id": "auto-link-unprocessed-fault-notices-batch-workflow",
       "title": "Batch auto-linking unprocessed fault notices to 1A work orders requires exact 1A filter mapping",
-      "description": "The 本段未處理故障通報 batch auto-link workflow is stable when it reuses one MMIS login and one 1A Playwright page, then queries each row with the exact 1A filter mapping: C1=新竹機務段, C2 cleared to empty by keyboard, C3=車號, and C11=>YYYY/M/D. Results are then written back to Excel column I without reopening the browser per row.",
+      "description": "The 本段未處理故障通報 batch auto-link workflow is stable when it reuses one MMIS login and one 1A Playwright page, then queries each row with the exact 1A filter mapping: C1=新竹機務段, C2 cleared to empty by keyboard, C3=車號, and C11=>YYYY/MM/DD after switching to 所有記錄. Results are then written back to Excel column I without reopening the browser per row.",
       "applicable_when": [
         "Building batch linkage from 本段未處理故障通報 Excel rows to 1A daily-check work orders",
         "Automating repeated 1A list queries from Excel source data",
@@ -443,9 +537,13 @@
         "C2 may contain a default depot-like value and must be cleared using keyboard actions such as Ctrl+A plus Backspace/Delete, then verified empty.",
         "C3 is the correct 車組/車號 filter field for this workflow.",
         "C11 is the correct 檢修日期 field and the query must use a leading > condition.",
-        "Normalize query dates to >YYYY/M/D or >YYYY/MM/DD only once; avoid creating a duplicated >> prefix.",
+        "Normalize query dates to >YYYY/MM/DD only once; avoid creating a duplicated >> prefix.",
+        "Switch to 所有記錄 before each query, not only once per session.",
+        "After all fields are filled, set focus back to C3 and use Enter on that field to trigger the query.",
         "Before pressing Enter, log the actual values of C1, C2, C3, and C11 so field-mapping mistakes are visible immediately.",
-        "A batch run on 本段未處理故障通報0409.xlsx produced 15 rows with 1 confirmed hit and 14 no-result rows; no-result is valid business output and should not be treated as a batch failure by itself.",
+        "For 1A, a valid empty result may render as 沒有要顯示的列。; treat that as no-result instead of query failure.",
+        "A batch run on 本段未處理故障通報0410(2).xlsx confirmed 3 work-order hits and 12 no-result rows after the no-result detection and stale-result fixes.",
+        "No-result is valid business output and should not be treated as a batch failure by itself.",
         "After finding a work order, failure to return cleanly to the list page should be treated as non-fatal for that row if the work order number has already been captured."
       ]
     }
@@ -523,6 +621,30 @@
       "notes": [
         "See references/mmis-web-data-location-guide.md.",
         "The guide covers DevTools inspection, selector priority, table row/column patterns, and Playwright waiting strategy."
+      ]
+    },
+    {
+      "id": "use-query-workflow-guide-for-mmis-filter-debugging",
+      "title": "Use the MMIS query workflow and debug guide before tuning Playwright query skills",
+      "description": "When a MMIS task involves filter-row input behavior, Enter-triggered queries, date formatting, all-records switching, or batch query debugging, read the dedicated query workflow guide first.",
+      "applicable_when": [
+        "Building a new MMIS list-query skill",
+        "Debugging wrong query results in Playwright",
+        "Stabilizing a batch MMIS query workflow"
+      ],
+      "advantages": [
+        "Centralizes reusable rules about focus, field mapping, no-result detection, and debug logging"
+      ],
+      "disadvantages": [
+        "Adds one more reference file to read before implementation"
+      ],
+      "recommended_when": [
+        "Any MMIS Playwright automation depends on filling filter-row textboxes and pressing Enter"
+      ],
+      "status": "confirmed",
+      "reusable": true,
+      "notes": [
+        "See references/mmis-query-workflow-and-debug-guide.md."
       ]
     }
   ]

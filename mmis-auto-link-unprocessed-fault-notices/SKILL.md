@@ -20,6 +20,14 @@ python C:\Users\NMMIS\.codex\skills\mmis-auto-link-unprocessed-fault-notices\scr
 - `--file <path>`
   - 指定 Excel 檔案，否則自動找當日 `本段未處理故障通報MMDD.xlsx`
 
+預設續跑行為：
+
+- 即使不帶 `--skip-filled`，也會自動略過已完成列：
+  - 已寫入工單號
+  - `找不到日檢單`
+  - `缺少查詢條件`
+- `查詢失敗` 或空白列會在下次重跑時再嘗試
+
 核心腳本：
 
 - `C:\Users\NMMIS\.codex\skills\mmis-auto-link-unprocessed-fault-notices\scripts\auto_link_unprocessed_fault_notices.py`
@@ -42,6 +50,8 @@ python C:\Users\NMMIS\.codex\skills\mmis-auto-link-unprocessed-fault-notices\scr
 - 找到第一筆工單後回填到 Excel `I` 欄
 - 找不到時寫入 `找不到日檢單`
 - 單筆失敗不中斷整批
+- 每筆查詢在按 Enter 前輸出完整頁面 debug 截圖到 `C:\Users\NMMIS\Downloads\mmis_query_debug\query_debug_<row>.png`
+- 每列處理完立即存檔，避免批次中斷時丟失進度
 
 ## 執行原則
 
@@ -51,6 +61,7 @@ python C:\Users\NMMIS\.codex\skills\mmis-auto-link-unprocessed-fault-notices\scr
 - 不可每筆重啟 browser
 - 不可每筆重新登入
 - 只寫入 `I` 欄，不改其他資料欄
+- 若單列查詢失敗，先寫回 `查詢失敗` 並立即存檔，再重建 browser/session 狀態後繼續下一列
 
 ## 主要流程
 

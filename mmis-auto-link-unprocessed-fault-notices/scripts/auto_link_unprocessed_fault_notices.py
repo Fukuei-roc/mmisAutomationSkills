@@ -39,11 +39,16 @@ TARGET_DIR = Path(
 )
 LOG_DIR = SKILL_DIR / "logs"
 LOG_FILE = LOG_DIR / "mmis_auto_link_unprocessed_fault_notices.log"
+DEBUG_SCREENSHOT_DIR = Path(r"C:\Users\NMMIS\Downloads\mmis_query_debug")
 DEFAULT_DEPOT = "新竹機務段"
 AUTOSAVE_EVERY = 5
 MAX_ROW_RETRIES = 3
+MAX_FIELD_RETRIES = 3
 OUTPUT_COLUMN_LETTER = "I"
 OUTPUT_HEADER = "日檢工單"
+DEBUG_SCREENSHOT_VIEWPORT = {"width": 2400, "height": 1800}
+DEBUG_SCREENSHOT_ZOOM = "0.75"
+SKIPPABLE_OUTPUT_VALUES = {"找不到日檢單", "缺少查詢條件"}
 
 QUERY_MENU_SELECTORS = [
     "#toolbar2_tbs_0_tbcb_0_query-img",
@@ -71,6 +76,7 @@ DATE_INPUT_SELECTORS = [
     "xpath=(//input[(contains(@id,'tfrow_') and contains(@id,'[C:12]_txt-tb'))])[1]",
 ]
 FILTER_INPUTS_SELECTOR = "xpath=//input[contains(@id,'tfrow_') and contains(@id,'_txt-tb')]"
+LOADING_OVERLAY_SELECTOR = "xpath=//*[@id='wait' or contains(@class,'bx--loading-overlay') or contains(@class,'wait')]"
 
 
 @dataclass
@@ -140,9 +146,9 @@ def format_excel_date(value: Any) -> str:
     if value is None:
         return ""
     if isinstance(value, datetime):
-        return f"{value.year}/{value.month}/{value.day}"
+        return value.strftime("%Y/%m/%d")
     if hasattr(value, "year") and hasattr(value, "month") and hasattr(value, "day"):
-        return f"{value.year}/{value.month}/{value.day}"
+        return f"{value.year:04d}/{value.month:02d}/{value.day:02d}"
 
     raw = normalize_value(str(value))
     if not raw:
@@ -152,7 +158,7 @@ def format_excel_date(value: Any) -> str:
     for pattern in ("%Y/%m/%d", "%Y/%m/%d %H:%M:%S", "%Y/%m/%d %H:%M"):
         with contextlib.suppress(ValueError):
             parsed = datetime.strptime(normalized, pattern)
-            return f"{parsed.year}/{parsed.month}/{parsed.day}"
+            return parsed.strftime("%Y/%m/%d")
     return raw
 
 
@@ -201,6 +207,8 @@ class AutoLinkUnprocessedFaultNotices(LinkedFaultNoticeQuery):
         self.success_count = 0
         self.fail_count = 0
         self.processed_count = 0
+        self._last_query_signature: tuple[str, str] | None = None
+        self._last_result_signature: str | None = None
 
     @contextlib.contextmanager
     def timed_step(self, name: str, **details: Any):
@@ -253,10 +261,17 @@ class AutoLinkUnprocessedFaultNotices(LinkedFaultNoticeQuery):
             header_cell.value = OUTPUT_HEADER
         return column_index
 
-    def select_all_records_mode(self) -> None:
-        if self._all_records_selected:
-            return
+    def should_skip_row(self, output_value: Any) -> bool:
+        normalized = normalize_value(str(output_value) if output_value is not None else "")
+        if not normalized:
+            return False
+        if self.skip_filled:
+            return True
+        if normalized in SKIPPABLE_OUTPUT_VALUES:
+            return True
+        return bool(re.fullmatch(r"\d{3}-1A-\d+", normalized))
 
+    def select_all_records_mode(self) -> None:
         def action() -> None:
             with self.timed_step("select_all_records_mode"):
                 assert self.page is not None
@@ -267,8 +282,12 @@ class AutoLinkUnprocessedFaultNotices(LinkedFaultNoticeQuery):
                 )
                 option = first_visible_locator(self.page, ALL_RECORDS_OPTION_SELECTORS)
                 option.click()
-                self.page.wait_for_load_state("networkidle")
+                self.wait_for_loading_complete()
+                first_visible_locator(self.page, C1_DEPOT_INPUT_SELECTORS).wait_for(
+                    state="visible", timeout=DEFAULT_TIMEOUT_MS
+                )
                 self._all_records_selected = True
+                self.logger.info("[DEBUG] switched to all records = true")
 
         self._with_retry("select_all_records_mode", action)
 
@@ -280,27 +299,115 @@ class AutoLinkUnprocessedFaultNotices(LinkedFaultNoticeQuery):
             with contextlib.suppress(Exception):
                 locator.fill("")
 
+    def wait_for_loading_complete(self, timeout_ms: int = DEFAULT_TIMEOUT_MS) -> None:
+        assert self.page is not None
+        with contextlib.suppress(Exception):
+            self.page.wait_for_load_state("networkidle")
+        with contextlib.suppress(Exception):
+            self.page.locator(LOADING_OVERLAY_SELECTOR).last.wait_for(state="hidden", timeout=timeout_ms)
+        self.page.wait_for_timeout(120)
+
     def clear_input_by_keyboard(self, locator) -> None:
-        locator.click()
-        locator.press("Control+A")
-        locator.press("Backspace")
-        if normalize_value(locator.input_value()):
-            locator.press("Delete")
+        assert self.page is not None
+        for _ in range(MAX_FIELD_RETRIES):
+            locator.click()
+            locator.press("Control+A")
+            locator.press("Backspace")
+            if normalize_value(locator.input_value()):
+                locator.press("Delete")
+            if not normalize_value(locator.input_value()):
+                return
+            self.page.wait_for_timeout(120)
         remaining = normalize_value(locator.input_value())
-        if remaining:
-            raise AutoLinkError(f"欄位清除失敗，仍有值: {remaining}")
+        raise AutoLinkError(f"欄位清除失敗，仍有值: {remaining}")
+
+    def fill_input_with_verification(self, locator, expected_value: str, *, field_name: str) -> None:
+        assert self.page is not None
+        for _ in range(MAX_FIELD_RETRIES):
+            locator.click()
+            locator.press("Control+A")
+            locator.press("Backspace")
+            locator.fill(expected_value)
+            actual_value = normalize_value(locator.input_value())
+            if actual_value == expected_value:
+                return
+            self.page.wait_for_timeout(120)
+        raise AutoLinkError(
+            f"{field_name} 欄位寫入失敗: expected={expected_value}, actual={normalize_value(locator.input_value())}"
+        )
 
     def _return_to_list_page(self) -> None:
         assert self.page is not None
         self.page.go_back(wait_until="domcontentloaded")
-        self.page.wait_for_load_state("networkidle")
-        first_visible_locator(self.page, C1_DEPOT_INPUT_SELECTORS).wait_for(state="visible", timeout=DEFAULT_TIMEOUT_MS)
+        self.wait_for_loading_complete(timeout_ms=5000)
+        first_visible_locator(self.page, C1_DEPOT_INPUT_SELECTORS).wait_for(state="visible", timeout=5000)
 
     def _has_no_results(self) -> bool:
         assert self.page is not None
-        no_result_patterns = ["查無資料", "沒有資料", "No records to display"]
-        body_text = self.page.locator("body").inner_text(timeout=DEFAULT_TIMEOUT_MS)
+        no_result_patterns = ["查無資料", "沒有資料", "沒有要顯示的列。", "No records to display"]
+        body_text = self.page.locator("body").inner_text(timeout=5000)
         return any(pattern in body_text for pattern in no_result_patterns) and self.page.locator(RESULT_ROW_SELECTOR).count() == 0
+
+    def _first_result_signature(self) -> str:
+        assert self.page is not None
+        with contextlib.suppress(Exception):
+            locator = self.page.locator(RESULT_ROW_SELECTOR).first
+            if locator.count() == 0:
+                return ""
+            return normalize_value(locator.inner_text(timeout=3000))
+        return ""
+
+    def wait_for_search_result_state(
+        self,
+        *,
+        previous_result_signature: str,
+        query_signature: tuple[str, str],
+        timeout_ms: int = 15000,
+    ) -> str:
+        assert self.page is not None
+        started_at = time.perf_counter()
+        while (time.perf_counter() - started_at) * 1000 < timeout_ms:
+            self.wait_for_loading_complete(timeout_ms=3000)
+            if self._has_no_results():
+                return "no_result"
+            current_signature = self._first_result_signature()
+            if current_signature:
+                if query_signature == self._last_query_signature and current_signature == self._last_result_signature:
+                    return "has_result"
+                if current_signature != previous_result_signature:
+                    return "has_result"
+            self.page.wait_for_timeout(250)
+        return "timeout"
+
+    def save_query_debug_screenshot(self, *, row_number: int) -> None:
+        assert self.page is not None
+        DEBUG_SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
+        target = DEBUG_SCREENSHOT_DIR / f"query_debug_{row_number}.png"
+        try:
+            self.page.set_viewport_size(DEBUG_SCREENSHOT_VIEWPORT)
+            previous_zoom = self.page.evaluate(
+                "() => document.body ? (document.body.style.zoom || '') : ''"
+            )
+            self.page.evaluate(
+                f"""() => {{
+                    if (document.body) {{
+                        document.body.style.zoom = "{DEBUG_SCREENSHOT_ZOOM}";
+                        window.scrollTo(0, 0);
+                    }}
+                }}"""
+            )
+            self.page.screenshot(path=str(target), full_page=True)
+            self.page.evaluate(
+                """(previousZoom) => {
+                    if (document.body) {
+                        document.body.style.zoom = previousZoom || '';
+                    }
+                }""",
+                previous_zoom,
+            )
+            self.logger.info("[DEBUG] screenshot saved: %s", target)
+        except Exception as exc:  # noqa: BLE001
+            self.logger.error("failed to save debug screenshot for row %s: %s", row_number, exc)
 
     def search_daily_check_work_order(self, *, row_number: int, date_query: str, car_no: str) -> str | None:
         def action() -> str | None:
@@ -320,10 +427,10 @@ class AutoLinkUnprocessedFaultNotices(LinkedFaultNoticeQuery):
                 car_input = first_visible_locator(self.page, CAR_NO_INPUT_SELECTORS)
 
                 self._clear_filter_inputs()
-                c1_input.fill(DEFAULT_DEPOT)
+                self.fill_input_with_verification(c1_input, DEFAULT_DEPOT, field_name="C1")
                 self.clear_input_by_keyboard(c2_input)
-                date_input.fill(date_query)
-                car_input.fill(car_no)
+                self.fill_input_with_verification(date_input, date_query, field_name="C11")
+                self.fill_input_with_verification(car_input, car_no, field_name="C3")
                 c1_value = normalize_value(c1_input.input_value())
                 c2_value = normalize_value(c2_input.input_value())
                 c3_value = normalize_value(car_input.input_value())
@@ -337,12 +444,28 @@ class AutoLinkUnprocessedFaultNotices(LinkedFaultNoticeQuery):
                         f"查詢前欄位驗證失敗: C1={c1_value}, C2={c2_value}, C3={c3_value}, C11={c11_value}"
                     )
                 self.logger.info("[DEBUG] query values: 日期=%s 車號=%s", date_query, car_no)
+                self.save_query_debug_screenshot(row_number=row_number)
+                previous_result_signature = self._first_result_signature()
+                query_signature = (date_query, car_no)
+                car_input.click()
+                self.page.wait_for_timeout(150)
+                if not car_input.evaluate("(element) => document.activeElement === element"):
+                    raise AutoLinkError("車號欄位未取得 focus，無法穩定觸發查詢")
+                self.logger.info("[DEBUG] focus set to C3 (車號欄位)")
+                self.logger.info("[DEBUG] press Enter to trigger query")
                 car_input.press("Enter")
-                self.page.wait_for_load_state("networkidle")
+                search_state = self.wait_for_search_result_state(
+                    previous_result_signature=previous_result_signature,
+                    query_signature=query_signature,
+                )
 
-                if self._has_no_results():
+                if search_state == "no_result":
                     self.logger.info("[INFO] no result")
+                    self._last_query_signature = query_signature
+                    self._last_result_signature = ""
                     return None
+                if search_state == "timeout":
+                    raise AutoLinkError("查詢後結果狀態未穩定")
 
                 first_result = self.page.locator(RESULT_ROW_SELECTOR).first
                 if first_result.count() == 0:
@@ -350,13 +473,23 @@ class AutoLinkUnprocessedFaultNotices(LinkedFaultNoticeQuery):
                     return None
 
                 first_result.wait_for(state="visible", timeout=DEFAULT_TIMEOUT_MS)
-                first_result.click()
+                self.wait_for_loading_complete()
+                for _ in range(MAX_FIELD_RETRIES):
+                    try:
+                        first_result.click(timeout=5000)
+                        break
+                    except Exception:  # noqa: BLE001
+                        self.wait_for_loading_complete(timeout_ms=5000)
+                else:
+                    first_result.click(timeout=DEFAULT_TIMEOUT_MS)
                 detail_input = self.page.locator(DETAIL_WORK_ORDER_SELECTOR).first
                 detail_input.wait_for(state="visible", timeout=DEFAULT_TIMEOUT_MS)
                 work_order_no = normalize_value(detail_input.input_value())
                 if not work_order_no:
                     raise AutoLinkError("進入明細後讀不到工單號")
                 self.logger.info("[INFO] found work order: %s", work_order_no)
+                self._last_query_signature = query_signature
+                self._last_result_signature = self._first_result_signature() or work_order_no
                 try:
                     self._return_to_list_page()
                 except Exception as exc:  # noqa: BLE001
@@ -382,7 +515,7 @@ class AutoLinkUnprocessedFaultNotices(LinkedFaultNoticeQuery):
             self.processed_count += 1
             self.logger.info("[INFO] processing row %s", row_index - 1)
             output_cell = self.worksheet.cell(row=row_index, column=self.output_column_index)
-            if self.skip_filled and normalize_value(output_cell.value):
+            if self.should_skip_row(output_cell.value):
                 self.logger.info("[INFO] skip filled row %s", row_index - 1)
                 continue
 
@@ -395,6 +528,7 @@ class AutoLinkUnprocessedFaultNotices(LinkedFaultNoticeQuery):
             if not formatted_date or not query_date or not car_no:
                 output_cell.value = "缺少查詢條件"
                 self.fail_count += 1
+                self.save_workbook()
                 continue
 
             self.logger.info("[INFO] searching: 日期=%s 車號=%s", formatted_date, car_no)
@@ -415,12 +549,13 @@ class AutoLinkUnprocessedFaultNotices(LinkedFaultNoticeQuery):
                 self.logger.error("row %s failed: %s", row_index, exc)
                 output_cell.value = "查詢失敗"
                 self.fail_count += 1
+                self.save_workbook()
                 self._all_records_selected = False
                 self._on_1a_page = False
+                self.close()
                 continue
 
-            if (row_index - 1) % AUTOSAVE_EVERY == 0:
-                self.save_workbook()
+            self.save_workbook()
 
         self.save_workbook()
         elapsed_ms = int((time.perf_counter() - started_at) * 1000)
@@ -441,7 +576,16 @@ class AutoLinkUnprocessedFaultNotices(LinkedFaultNoticeQuery):
     def save_workbook(self) -> None:
         assert self.workbook is not None
         assert self.file_path is not None
-        self.workbook.save(self.file_path)
+        last_error: Exception | None = None
+        for _ in range(MAX_FIELD_RETRIES):
+            try:
+                self.workbook.save(self.file_path)
+                return
+            except PermissionError as exc:
+                last_error = exc
+                time.sleep(0.5)
+        if last_error is not None:
+            raise last_error
 
 
 def run_auto_link(*, file_path: str | None = None, skip_filled: bool = False) -> dict[str, Any]:
